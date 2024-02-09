@@ -2,6 +2,8 @@ package com.example.thecounter
 
 import zio._
 import scala.collection.concurrent.TrieMap
+// import io.getquill._
+// import io.getquill.jdbczio.Quill
 
 trait IncrementRepo[A] {
   def prepareBatch(batch: Iterator[(String, Int)]): A
@@ -18,28 +20,31 @@ object IncrementRepo {
 
   def submitBatchUpdate[A: Tag](batch: A) = ZIO.serviceWith[IncrementRepo[A]](_.submitBatchUpdate(batch))
 
-  def getAll[A: Tag]() = ZIO.serviceWith[IncrementRepo[A]](_.getAll())
+  def getAll[A: Tag]() = ZIO.serviceWith[IncrementRepo[A]](_.getAll()).flatten
 
-  def getOne[A: Tag](key: String) = ZIO.serviceWith[IncrementRepo[A]](_.get(key))
+  def getOne[A: Tag](key: String) = ZIO.serviceWith[IncrementRepo[A]](_.get(key)).flatten
 }
 
 // TODO: Move to tests
 object TestIncrementRepo {
-  val layer = ZLayer.succeed(TestIncrementRepo(TrieMap()))
+  type TestBatch = List[(String, Int)]
+  val layer = ZLayer.succeed[IncrementRepo[TestBatch]](TestIncrementRepo(TrieMap()))
 }
 
-final case class TestIncrementRepo(val map: TrieMap[String, Int]) extends IncrementRepo[List[(String, Int)]] {
+final case class TestIncrementRepo(val map: TrieMap[String, Int]) extends IncrementRepo[TestIncrementRepo.TestBatch] {
+  import TestIncrementRepo.TestBatch
 
-  override def prepareBatch(batch: Iterator[(String, Int)]): List[(String, Int)] = batch.toList
+  println("Instance created")
+  override def prepareBatch(batch: Iterator[(String, Int)]): TestBatch = batch.toList
 
-  override def submitBatchUpdate(batch: List[(String, Int)]): UIO[Boolean] = {
+  override def submitBatchUpdate(batch: TestBatch): UIO[Boolean] = ZIO.succeed {
     batch.foreach { case (k, v) =>
       map.get(k) match {
-        case None        => map.update(k, v)
-        case Some(value) => map.update(k, v + value)
+        case None        => map.put(k, v)
+        case Some(value) => map.put(k, v + value)
       }
     }
-    ZIO.succeed(true)
+    true
   }
 
   override def getAll(): Task[Map[String, Int]] = ZIO.succeed(map.toMap)
@@ -47,3 +52,5 @@ final case class TestIncrementRepo(val map: TrieMap[String, Int]) extends Increm
   override def get(key: String): Task[Option[Int]] = ZIO.succeed(map.get(key))
 
 }
+
+final class PostgresIncrementRepo() {}

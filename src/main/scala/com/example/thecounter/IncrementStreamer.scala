@@ -2,16 +2,31 @@ package com.example.thecounter
 
 import zio._
 import zio.stream._
-
 object IncrementStreamer {
+  def make[A: Tag](
+      perBatchSize: Int,
+      perBatchCollectionTime: Duration,
+      updateBatchSize: Int,
+      updateBatchTime: Duration
+  ): ZIO[InboundQueue, Nothing, ZStream[IncrementRepo[A], Nothing, Boolean]] = {
+    for {
+      queueStream <- InboundQueue.attachToStream
+      _ <- Console.printLine("Stream created.").ignore
+    } yield queueStream
+      .via(batchIncrements(perBatchSize, perBatchCollectionTime))
+      .via(coordinateBatches(updateBatchSize, updateBatchTime))
+      .flattenZIO
+
+  }
+
   // The streamed Map which can also be looked at like List[Increments]/List[(String,Int)].
   def batchIncrements(
-      input: ZStream[Any, Nothing, Model.Increment],
       bufferSize: Int = 1024,
       maxCollectionDuration: Duration = 2.seconds
-  ): ZStream[Any, Nothing, Map[String, Int]] = {
-    input
-      .filterNot(_.value == 0) // filter out no-ops where value == 0, but not necessary 0 + anything is anything.
+  ) = {
+    ZPipeline
+      .apply[Model.Increment]
+      .filter(_.value != 0) // filter out no-ops where value == 0, but not necessary 0 + anything is anything.
       .groupedWithin(bufferSize, maxCollectionDuration)
       .tap(in =>
         Console
@@ -26,11 +41,12 @@ object IncrementStreamer {
   // Since addition is associative in nature batches can be inserted in any order and parallel.
   // Sorry for the type gymastics to make this reusable/testable.
   def coordinateBatches[B: Tag](
-      input: ZStream[Console, Nothing, Map[String, Int]],
       bufferSize: Int = 16,
       maxCollectionDuration: Duration = 6.seconds
-  ): ZStream[Console & IncrementRepo[B], Nothing, Any] = {
-    input
+  ): ZPipeline[IncrementRepo[B], Nothing, Map[String, Int], UIO[Boolean]] = {
+
+    ZPipeline
+      .apply[Map[String, Int]]
       .groupedWithin(bufferSize, maxCollectionDuration)
       .tap(in =>
         Console
@@ -42,9 +58,8 @@ object IncrementStreamer {
       }
       .flattenChunks
       .mapZIOParUnordered(bufferSize) { batch =>
-        // TODO: retry logic.
+        // TODO: failure handling/retry logic.
         IncrementRepo.submitBatchUpdate(batch)
       }
-      .flattenZIO
   }
 }
