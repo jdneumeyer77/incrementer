@@ -8,14 +8,13 @@ object IncrementStreamer {
       perBatchCollectionTime: Duration,
       updateBatchSize: Int,
       updateBatchTime: Duration
-  ): ZIO[InboundQueue, Nothing, ZStream[IncrementRepo[A], Nothing, Boolean]] = {
+  ): ZIO[InboundQueue, Nothing, ZStream[IncrementRepo, Nothing, Boolean]] = {
     for {
       queueStream <- InboundQueue.attachToStream
       _ <- Console.printLine("Stream created.").ignore
     } yield queueStream
       .via(batchIncrements(perBatchSize, perBatchCollectionTime))
       .via(coordinateBatches(updateBatchSize, updateBatchTime))
-      .flattenZIO
 
   }
 
@@ -39,27 +38,23 @@ object IncrementStreamer {
   }
 
   // Since addition is associative in nature batches can be inserted in any order and parallel.
-  // Sorry for the type gymastics to make this reusable/testable.
-  def coordinateBatches[B: Tag](
+  def coordinateBatches(
       bufferSize: Int = 16,
       maxCollectionDuration: Duration = 6.seconds
-  ): ZPipeline[IncrementRepo[B], Nothing, Map[String, Int], UIO[Boolean]] = {
+  ): ZPipeline[IncrementRepo, Nothing, Map[String, Long], Boolean] = {
 
     ZPipeline
-      .apply[Map[String, Int]]
+      .apply[Map[String, Long]]
       .groupedWithin(bufferSize, maxCollectionDuration)
       .tap(in =>
         Console
           .printLine(s"collected a batch of ${in.length} within ${maxCollectionDuration.getSeconds()} seconds")
           .ignoreLogged
       )
-      .mapZIOParUnordered(16) { group =>
-        group.mapZIO(batch => IncrementRepo.prepareBatch(batch.iterator))
-      }
       .flattenChunks
       .mapZIOParUnordered(bufferSize) { batch =>
         // TODO: failure handling/retry logic.
-        IncrementRepo.submitBatchUpdate(batch)
+        IncrementRepo.submitBatchUpdate(batch.iterator)
       }
   }
 }

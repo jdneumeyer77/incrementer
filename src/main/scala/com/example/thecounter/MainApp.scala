@@ -25,7 +25,7 @@ object MainApp extends ZIOAppDefault {
       }
     },
     Method.GET / "increment" -> handler { (req: Request) =>
-      IncrementRepo.getAll[TestIncrementRepo.TestBatch]().map { incrs =>
+      IncrementRepo.getAll().map { incrs =>
         println(incrs)
         Response.json(incrs.toJson)
       }
@@ -42,7 +42,7 @@ object MainApp extends ZIOAppDefault {
       incrRepoRaw = TestIncrementRepo(TrieMap())
       incrRepo = ZLayer.succeed(incrRepoRaw)
       streamFiber <- IncrementStreamer
-        .make[TestIncrementRepo.TestBatch](4096, 2.seconds, 16, 5.seconds)
+        .make(4096, 2.seconds, 16, 5.seconds)
         .flatMap(x => x.foreach(Console.printLine(_)))
         .provide(queue, incrRepo)
         .fork

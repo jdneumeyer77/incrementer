@@ -7,7 +7,7 @@ import zio.http.endpoint._
 import zio.http.Response
 
 object Model {
-  case class Increment(key: String, value: Int)
+  case class Increment(key: String, value: Long)
 
   implicit val decoder: JsonDecoder[Increment] = DeriveJsonDecoder.gen[Increment]
 }
