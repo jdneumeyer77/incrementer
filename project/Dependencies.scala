@@ -7,10 +7,12 @@ object Dependencies {
 
   val zioHttp = "dev.zio" %% "zio-http" % zioHttpVersion
 
-  val zioJson = "dev.zio" %% "zio-json" % "0.6.2"
+  val jsoniter = "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.28.2"
+  val jsoniterMacros =
+    "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.28.2" % "compile-internal"
 
   val zioQuill = "io.getquill" %% "quill-zio" % "4.8.1"
-  val zioQuillPostgresAsync = "io.getquill" %% "quill-jasync-postgres" % "4.8.0"
+  val zioQuillPostgresAsync = "io.getquill" %% "quill-jasync-zio-postgres" % "4.8.0"
 
   val zioTest = "dev.zio" %% "zio-test" % zioVersion % Test
   val zioTestSBT = "dev.zio" %% "zio-test-sbt" % zioVersion % Test
