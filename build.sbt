@@ -14,12 +14,13 @@ def settingsApp = Seq(
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
   libraryDependencies ++= Seq(
     zioHttp,
-    zioJson,
     zioTest,
     zioTestSBT,
     zioTestMagnolia,
     zioQuill,
-    zioQuillPostgresAsync
+    zioQuillPostgresAsync,
+    jsoniter,
+    jsoniterMacros
   )
 )
 

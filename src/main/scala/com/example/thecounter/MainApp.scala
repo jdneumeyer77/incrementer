@@ -1,7 +1,6 @@
 package com.example.thecounter
 
 import zio._
-import zio.json._
 import zio.http._
 import zio.http.endpoint._
 import zio.http.Response
@@ -9,8 +8,21 @@ import zio.http.Response
 import Utils._
 import zio.stream.ZStream
 import scala.collection.concurrent.TrieMap
+import io.getquill.context.qzio._
+import io.getquill._
+import com.github.jasync.sql.db.postgresql.PostgreSQLConnection
+import io.getquill.util.LoadConfig
+
+object DBContext extends PostgresZioJAsyncContext(SnakeCase)
 
 object MainApp extends ZIOAppDefault {
+
+  val dbConfig = ZLayer.succeed(PostgresJAsyncContextConfig(LoadConfig.apply("testPostgresDB")))
+
+  val connection =
+    ZioJAsyncConnection.live[PostgreSQLConnection]
+
+  val postgresIncrementRepo = connection ++ ZLayer.succeed(new PostgresIncrementRepo())
 
   val routes = Routes(
     Method.POST / "increment" -> handler { (req: Request) =>
@@ -26,30 +38,26 @@ object MainApp extends ZIOAppDefault {
     },
     Method.GET / "increment" -> handler { (req: Request) =>
       IncrementRepo.getAll().map { incrs =>
-        println(incrs)
-        Response.json(incrs.toJson)
+        Response.json(incrs.toString)
       }
     }
   ).sandbox
-
-  // val queue = ZLayer.succeed(runtime.run(InboundQueue.make(1024)))
-  // val incrRepo = TestIncrementRepo.layer
 
   override val run = {
     for {
       q <- InboundQueue.make(1024)
       queue = ZLayer.succeed(q)
-      incrRepoRaw = TestIncrementRepo(TrieMap())
-      incrRepo = ZLayer.succeed(incrRepoRaw)
       streamFiber <- IncrementStreamer
-        .make(4096, 2.seconds, 16, 5.seconds)
-        .flatMap(x => x.foreach(Console.printLine(_)))
-        .provide(queue, incrRepo)
+        .make(4096, 5.seconds, 16)
+        .flatMap(x => x.runDrain)
+        .provide(queue, postgresIncrementRepo, dbConfig)
         .fork
-      service <- Server.serve(routes.toHttpApp).provide(Server.defaultWithPort(3333), queue, incrRepo).fork
+      service <- Server
+        .serve(routes.toHttpApp)
+        .provide(Server.defaultWithPort(3333), queue, postgresIncrementRepo, dbConfig)
+        .fork
       _ <- Console.printLine("Application started at http://localhost:3333")
-      _ <- streamFiber.join
-      _ <- service.join
+      _ <- streamFiber.zip(service).join
     } yield Exit.Success
   }
 }

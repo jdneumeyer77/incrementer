@@ -2,26 +2,48 @@ package com.example.thecounter
 
 import zio._
 import zio.stream._
+import io.getquill.context.qzio.ZioJAsyncConnection
+
 object IncrementStreamer {
-  def make[A: Tag](
+  def make(
       perBatchSize: Int,
       perBatchCollectionTime: Duration,
-      updateBatchSize: Int,
-      updateBatchTime: Duration
-  ): ZIO[InboundQueue, Nothing, ZStream[IncrementRepo, Nothing, Boolean]] = {
+      updateBatchSize: Int
+  ): ZIO[InboundQueue, Nothing, ZStream[PostgresIncrementRepo with ZioJAsyncConnection, Throwable, Boolean]] = {
     for {
       queueStream <- InboundQueue.attachToStream
       _ <- Console.printLine("Stream created.").ignore
     } yield queueStream
       .via(batchIncrements(perBatchSize, perBatchCollectionTime))
-      .via(coordinateBatches(updateBatchSize, updateBatchTime))
-
+      .buffer(updateBatchSize * 4)
+      .mapZIOParUnordered(updateBatchSize) { batch =>
+        // TODO: failure handling/retry logic.
+        IncrementRepo.submitBatchUpdate(batch.iterator)
+      }
   }
 
-  // The streamed Map which can also be looked at like List[Increments]/List[(String,Int)].
+  // For tests only.
+  def makeInMemory(
+      perBatchSize: Int,
+      perBatchCollectionTime: Duration,
+      updateBatchSize: Int
+  ): ZIO[InboundQueue, Nothing, ZStream[TestIncrementRepo, Nothing, Boolean]] = {
+    for {
+      queueStream <- InboundQueue.attachToStream
+      _ <- Console.printLine("Stream created.").ignore
+    } yield queueStream
+      .via(batchIncrements(perBatchSize, perBatchCollectionTime))
+      .buffer(updateBatchSize * 4)
+      .mapZIOParUnordered(updateBatchSize) { batch =>
+        // TODO: failure handling/retry logic.
+        ZIO.serviceWith[TestIncrementRepo](_.submitBatchUpdate(batch.iterator)).flatten
+      }
+  }
+
+  // The streamed Map which can also be looked at like List[Increment]/List[(String,Int)].
   def batchIncrements(
-      bufferSize: Int = 1024,
-      maxCollectionDuration: Duration = 2.seconds
+      bufferSize: Int,
+      maxCollectionDuration: Duration
   ) = {
     ZPipeline
       .apply[Model.Increment]
@@ -37,24 +59,32 @@ object IncrementStreamer {
       .map(chunk => chunk.groupMapReduce(_.key)(_.value)(_ + _)) // group by key, add/consolidate values together
   }
 
-  // Since addition is associative in nature batches can be inserted in any order and parallel.
-  def coordinateBatches(
-      bufferSize: Int = 16,
-      maxCollectionDuration: Duration = 6.seconds
-  ): ZPipeline[IncrementRepo, Nothing, Map[String, Long], Boolean] = {
+  // def coordinateBatchesPostgres(bufferSize: Int = 16, maxCollectionDuration: Duration = 6.seconds) =
+  //   coordinateBatches(bufferSize, maxCollectionDuration)
+  //     .mapZIOParUnordered(bufferSize) { batch =>
+  //       // TODO: failure handling/retry logic.
+  //       IncrementRepo.submitBatchUpdate(batch.iterator)
+  //     }
 
-    ZPipeline
-      .apply[Map[String, Long]]
-      .groupedWithin(bufferSize, maxCollectionDuration)
-      .tap(in =>
-        Console
-          .printLine(s"collected a batch of ${in.length} within ${maxCollectionDuration.getSeconds()} seconds")
-          .ignoreLogged
-      )
-      .flattenChunks
-      .mapZIOParUnordered(bufferSize) { batch =>
-        // TODO: failure handling/retry logic.
-        IncrementRepo.submitBatchUpdate(batch.iterator)
-      }
-  }
+  // def coordinateBatchesInMemory(bufferSize: Int = 16, maxCollectionDuration: Duration = 6.seconds) =
+  //   coordinateBatches(bufferSize, maxCollectionDuration)
+  //     .mapZIOParUnordered(bufferSize) { batch =>
+  //       ZIO.serviceWith[TestIncrementRepo](_.submitBatchUpdate(batch.iterator)).flatten
+  //     }
+
+  // // Since addition is associative in nature batches can be inserted in any order and parallel.
+  // def coordinateBatches(
+  //     bufferSize: Int = 16,
+  //     maxCollectionDuration: Duration = 6.seconds
+  // ): ZPipeline[Any, Nothing, Map[String, Long], Map[String, Long]] = {
+  //   ZPipeline
+  //     .apply[Map[String, Long]]
+  //     .groupedWithin(bufferSize, maxCollectionDuration)
+  //     .tap(in =>
+  //       Console
+  //         .printLine(s"collected a batch of ${in.length} within ${maxCollectionDuration.getSeconds()} seconds")
+  //         .ignoreLogged
+  //     )
+  //     .flattenChunks
+  // }
 }

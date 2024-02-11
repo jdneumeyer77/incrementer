@@ -3,40 +3,31 @@ package com.example.thecounter
 import zio._
 import scala.collection.concurrent.TrieMap
 import io.getquill._
-import io.getquill.PostgresJAsyncContext
 import java.time.Instant
-
-trait IncrementRepo {
-  import IncrementRepo.IncrementResult
-
-  def submitBatchUpdate(batch: Iterator[(String, Long)]): UIO[Boolean]
-
-  def getAll(): Task[List[IncrementResult]]
-
-  def get(key: String): Task[Option[IncrementResult]]
-}
+import java.util.Date
+import io.getquill.context.qzio.ZioJAsyncConnection
 
 object IncrementRepo {
-  import zio.json._
+  import com.github.plokhotnyuk.jsoniter_scala.macros._
+  import com.github.plokhotnyuk.jsoniter_scala.core._
+
   case class IncrementResult(key: String, value: Long, createdAt: Instant, lastUpdatedAt: Instant)
 
-  implicit val encoder: JsonEncoder[IncrementResult] = DeriveJsonEncoder.gen[IncrementResult]
+  implicit val codec: JsonValueCodec[IncrementResult] = JsonCodecMaker.make
 
   def submitBatchUpdate(batch: Iterator[(String, Long)]) =
-    ZIO.serviceWith[IncrementRepo](_.submitBatchUpdate(batch)).flatten
+    ZIO.serviceWith[PostgresIncrementRepo](_.submitBatchUpdate(batch)).flatten
 
-  def getAll() = ZIO.serviceWith[IncrementRepo](_.getAll()).flatten
+  def getAll() = ZIO.serviceWith[PostgresIncrementRepo](_.getAll()).flatten
 
-  def getOne[A: Tag](key: String) = ZIO.serviceWith[IncrementRepo](_.get(key)).flatten
+  def getOne(key: String) = ZIO.serviceWith[PostgresIncrementRepo](_.get(key)).flatten
 }
 
 // TODO: Move to tests
-final case class TestIncrementRepo(val map: TrieMap[String, IncrementRepo.IncrementResult]) extends IncrementRepo {
+final case class TestIncrementRepo(val map: TrieMap[String, IncrementRepo.IncrementResult]) {
   import IncrementRepo.IncrementResult
 
-  println("Instance created")
-
-  override def submitBatchUpdate(batch: Iterator[(String, Long)]): UIO[Boolean] = ZIO.succeed {
+  def submitBatchUpdate(batch: Iterator[(String, Long)]): UIO[Boolean] = ZIO.succeed {
     batch.foreach { case (key, incoming_value) =>
       map.get(key) match {
         case None    => map.put(key, IncrementResult(key, incoming_value, Instant.now(), Instant.now()))
@@ -46,49 +37,63 @@ final case class TestIncrementRepo(val map: TrieMap[String, IncrementRepo.Increm
     true
   }
 
-  override def getAll(): Task[List[IncrementResult]] = ZIO.succeed(map.values.toList)
+  def getAll(): Task[List[IncrementResult]] = ZIO.succeed(map.values.toList)
 
-  override def get(key: String): Task[Option[IncrementResult]] = ZIO.succeed(map.get(key))
+  def get(key: String): Task[Option[IncrementResult]] = ZIO.succeed(map.get(key))
 
 }
 
-final class PostgresIncrementRepo(ctx: PostgresJAsyncContext[SnakeCase]) extends IncrementRepo {
-  import ctx._
-  import IncrementRepo.IncrementResult
-  override def submitBatchUpdate(batch: Iterator[(String, Long)]): UIO[Boolean] = {
+final class PostgresIncrementRepo() {
+  import DBContext._
+  import IncrementRepo._
+
+  implicit val instantEncoder: MappedEncoding[Instant, Date] =
+    MappedEncoding[Instant, Date](i => Date.from(i))
+  implicit val instantDecoder: MappedEncoding[Date, Instant] =
+    MappedEncoding[Date, Instant](d => d.toInstant)
+
+  def submitBatchUpdate(batch: Iterator[(String, Long)]) = {
     val list = batch.map { case (key, value) => IncrementResult(key, value, Instant.now(), Instant.now()) }.toList
 
+    // batched queries:
+    // INSERT INTO increment_result AS t (key,value,created_at,last_updated_at) VALUES (?, ?, ?, ?)
+    // ON CONFLICT (value,last_updated_at)
+    // DO UPDATE SET value = (old.value + EXCLUDED.value)
     val q = quote {
-      lift(list).foreach { insert =>
+      liftQuery(list).foreach { insert =>
         query[IncrementResult]
           .insertValue(insert)
-          .onConflictUpdate(_.value, _.lastUpdatedAt)(
-            (old, next) => old.value -> (old.value + next.value),
-            (old, next) => old.lastUpdatedAt -> Instant.now()
+          .onConflictUpdate(_.value, _.lastUpdatedAt)((old, next) => old.value -> (old.value + next.value)
+          // (old, next) => old.lastUpdatedAt -> (Instant.now())
           )
 
       }
     }
 
-    Console.printLine(s"debug... ${translate(q)}") *>
-      run(q)
+    run(q)
+      .map(_.length > 0)
   }
 
-  override def getAll(): Task[List[IncrementRepo.IncrementResult]] = {
+  def getAll(): RIO[ZioJAsyncConnection, Seq[IncrementRepo.IncrementResult]] = {
+    // SELECT x.key, x.value, x.created_at AS createdAt, x.last_updated_at AS lastUpdatedAt
+    //  FROM increment_result x
     val q = quote {
       query[IncrementResult]
     }
 
-    Console.printLine("fetching all key/values") *>
-      run(q)
+    run(q)
   }
 
-  override def get(key: String): Task[Option[IncrementResult]] = {
+  def get(key: String): RIO[ZioJAsyncConnection, Option[IncrementResult]] = {
+    // SELECT incr.key, incr.value, incr.created_at AS createdAt, incr.last_updated_at AS lastUpdatedAt
+    // FROM increment_result incr
+    // WHERE incr.key = ?
+    // LIMIT 1
     val q = quote {
-      query[IncrementRepo.IncrementResult].filter(incr => incr.key == key)
+      query[IncrementResult].filter(incr => incr.key == lift(key)).take(1)
     }
-    Console.printLine(s"fetch value for key: $key") *>
-      run(q)
+
+    run(q).map(_.headOption)
   }
 
 }
