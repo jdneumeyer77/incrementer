@@ -2,12 +2,13 @@ package com.example.thecounter
 
 import zio._
 import zio.stream.ZStream
+import zio.http.Response
 
 object InboundQueue {
-  def make(bufferSize: Int) = if (bufferSize == -1) {
-    Queue.unbounded[Model.Increment].map(InboundQueue.apply _)
+  def make(bufferSize: Int, timeout: Duration) = if (bufferSize == -1) {
+    Queue.unbounded[Model.Increment].map(InboundQueue.apply(_, timeout))
   } else {
-    Queue.bounded[Model.Increment](bufferSize).map(InboundQueue.apply _)
+    Queue.bounded[Model.Increment](bufferSize).map(InboundQueue.apply(_, timeout))
   }
 
   def enqueue(item: Model.Increment) = ZIO.serviceWith[InboundQueue](_.enqueue(item)).flatten
@@ -15,14 +16,9 @@ object InboundQueue {
   def get = ZIO.serviceWith[InboundQueue](_.queue)
 }
 
-final case class InboundQueue(queue: Queue[Model.Increment]) {
+final case class InboundQueue(queue: Queue[Model.Increment], timeout: Duration) {
   def enqueue(item: Model.Increment) = {
-    for {
-      res <- Console.printLine(s"enq'd item...") *>
-        queue.offer(item)
-      numOfQuedItems <- queue.size
-      _ <- Console.printLine(s"num of items: ${numOfQuedItems}")
-    } yield res
+    queue.offer(item).timeoutFail(Response.gatewayTimeout("timed out waiting to enqueue item."))(timeout)
   }
 
   val attachToStream = ZStream.fromQueue(queue)

@@ -20,7 +20,7 @@ object IncrementRepo {
 
   def getAll() = ZIO.serviceWith[PostgresIncrementRepo](_.getAll()).flatten
 
-  def getOne(key: String) = ZIO.serviceWith[PostgresIncrementRepo](_.get(key)).flatten
+  def get(key: String) = ZIO.serviceWith[PostgresIncrementRepo](_.get(key)).flatten
 }
 
 // TODO: Move to tests

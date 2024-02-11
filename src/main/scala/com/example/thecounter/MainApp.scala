@@ -16,6 +16,22 @@ import io.getquill.util.LoadConfig
 object DBContext extends PostgresZioJAsyncContext(SnakeCase)
 
 object MainApp extends ZIOAppDefault {
+  // TODO: Move to config file...
+  // Queue blocks upon reaching the size limit
+  // and times out after so many seconds.
+  // This applies backpressure on the client
+  // but also may indicate the need for more nodes.
+  val InboundQueueTimeout = 1.second
+  val InboundQueueBufferSize = 8096
+
+  // Collect up to StreamBatchSize or wait up to StreamCollectionTime
+  // when collecting a batch.
+  val StreamBatchSize = 8096
+  val StreamCollectionTime = 5.seconds
+
+  // This is number of concurrent batch submissions/connections to Postgres
+  // TODO: This should align with the size of postgres connection pool.
+  val StreamParrelBatch = 16
 
   val dbConfig = ZLayer.succeed(PostgresJAsyncContextConfig(LoadConfig.apply("testPostgresDB")))
 
@@ -29,7 +45,9 @@ object MainApp extends ZIOAppDefault {
       for {
         // TODO: validate not negative
         incr <- req.body.asJson[Model.Increment]()
-        // TODO: what to do if couldn't enqueue?
+        validated <-
+          if (incr.value < 0) { ZIO.fail(Response.badRequest("value must be postiive")) }
+          else { ZIO.succeed(incr) }
         result <- InboundQueue.enqueue(incr)
         _ <- if (!result) Console.printLine(s"InboundQueue full!") else ZIO.succeed(())
       } yield {
@@ -40,18 +58,25 @@ object MainApp extends ZIOAppDefault {
       IncrementRepo.getAll().map { incrs =>
         Response.json(incrs.toString)
       }
+    },
+    Method.GET / "increment" / string("key") -> handler { (key: String, req: Request) =>
+      IncrementRepo.get(key).map { incrs =>
+        Response.json(incrs.toString)
+      }
     }
   ).sandbox
 
   override val run = {
     for {
-      q <- InboundQueue.make(1024)
+      q <- InboundQueue.make(InboundQueueBufferSize, InboundQueueTimeout)
       queue = ZLayer.succeed(q)
+      // Stream runs in the background
       streamFiber <- IncrementStreamer
-        .make(4096, 5.seconds, 16)
+        .make(StreamBatchSize, StreamCollectionTime, StreamParrelBatch)
         .flatMap(x => x.runDrain)
         .provide(queue, postgresIncrementRepo, dbConfig)
         .fork
+      // concurrently with the webservice.
       service <- Server
         .serve(routes.toHttpApp)
         .provide(Server.defaultWithPort(3333), queue, postgresIncrementRepo, dbConfig)
