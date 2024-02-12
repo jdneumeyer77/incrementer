@@ -8,7 +8,6 @@ import zio.http.Response
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
-import Utils._
 import zio.stream.ZStream
 import scala.collection.concurrent.TrieMap
 import io.getquill.context.qzio._
@@ -37,55 +36,36 @@ object MainApp extends ZIOAppDefault {
   val StreamParrelBatch = 16
 
   val dbConfig = ZLayer.succeed(PostgresJAsyncContextConfig(LoadConfig.apply("counterdb")))
-
   val connection =
-    ZioJAsyncConnection.live[PostgreSQLConnection]
+    dbConfig >>>
+      ZioJAsyncConnection.live[PostgreSQLConnection]
+  val postgresIncrementRepo = (connection >>> ZLayer.fromZIO(IncrementRepo.makeLive)).memoize
 
-  val postgresIncrementRepo = (connection ++ ZLayer.succeed(new PostgresIncrementRepo())).memoize
-
-  val routes = Routes(
-    Method.POST / "increment" -> handler { (req: Request) =>
-      for {
-        // TODO: validate not negative
-        incr <- req.body.asJson[Model.Increment]()
-        validated <-
-          if (incr.value < 0) { ZIO.fail(Response.badRequest("value must be postiive")) }
-          else { ZIO.succeed(incr) }
-        result <- InboundQueue.enqueue(incr)
-        _ <- if (!result) Console.printLine(s"InboundQueue full!") else ZIO.succeed(())
-      } yield {
-        Response.status(Status.Accepted)
-      }
-    },
-    Method.GET / "increment" -> handler { (req: Request) =>
-      IncrementRepo.getAll().map { incrs =>
-        Response.json(writeToString(incrs))
-      }
-    },
-    Method.GET / "increment" / string("key") -> handler { (key: String, req: Request) =>
-      IncrementRepo.get(key).map { incr =>
-        Response.json(writeToString(incr))
-      }
-    }
-  ).sandbox
+  def makeQueue = if (InboundQueueBufferSize == -1) {
+    Queue.unbounded[Model.Increment]
+  } else {
+    Queue.bounded[Model.Increment](InboundQueueBufferSize)
+  }
 
   override val run = {
     for {
-      q <- InboundQueue.make(InboundQueueBufferSize, InboundQueueTimeout)
-      queue = ZLayer.succeed(q)
+      q <- makeQueue
       repo <- postgresIncrementRepo
       // Stream runs in the background
       streamFiber <- IncrementStreamer
-        .make(StreamBatchSize, StreamCollectionTime, StreamParrelBatch)
-        .flatMap(x => x.runDrain)
-        .provide(queue, repo, dbConfig)
+        .make(q, StreamBatchSize, StreamCollectionTime, StreamParrelBatch)
+        .runDrain
+        .provide(repo)
         .fork
+      _ <- Console.printLine("Stream has started!")
+      service <- IncrementService.makeLive(q, InboundQueueTimeout).provide(repo)
+      routes <- IncrementRoutes.make().provide(service)
       // concurrently with the webservice.
       service <- Server
         .serve(routes.toHttpApp)
-        .provide(Server.defaultWithPort(3333), queue, repo, dbConfig)
+        .provide(Server.defaultWithPort(3333))
         .fork
-      _ <- Console.printLine("Application started at http://localhost:3333")
+      _ <- Console.printLine("Service started at http://localhost:3333")
       _ <- streamFiber.zip(service).join
     } yield Exit.Success
   }

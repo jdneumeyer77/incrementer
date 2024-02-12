@@ -16,6 +16,10 @@ object IncrementRepo {
   def getAll() = ZIO.serviceWith[PostgresIncrementRepo](_.getAll()).flatten
 
   def get(key: String) = ZIO.serviceWith[PostgresIncrementRepo](_.get(key)).flatten
+
+  def makeLive = for {
+    connection <- ZIO.environment[ZioJAsyncConnection]
+  } yield new PostgresIncrementRepo(connection)
 }
 
 // TODO: Move to tests
@@ -37,16 +41,15 @@ final case class TestIncrementRepo(val map: TrieMap[String, IncrementResult]) {
 
 }
 
-final class PostgresIncrementRepo() {
+final class PostgresIncrementRepo(connection: ZEnvironment[ZioJAsyncConnection]) {
   import DBContext._
-  import DBContext.extras._
 
   implicit val instantEncoder: MappedEncoding[Instant, Date] =
     MappedEncoding[Instant, Date](i => Date.from(i))
   implicit val instantDecoder: MappedEncoding[Date, Instant] =
     MappedEncoding[Date, Instant](d => d.toInstant)
 
-  def submitBatchUpdate(batch: Iterator[(String, Long)]) = {
+  def submitBatchUpdate(batch: Iterator[(String, Long)]): ZIO[Any, Throwable, Boolean] = {
     val list = batch.map { case (key, value) => IncrementResult(key, value, Instant.now(), Instant.now()) }.toList
 
     // batched queries:
@@ -70,9 +73,10 @@ final class PostgresIncrementRepo() {
     Console.printLine(s"updating by batch") *>
       run(q)
         .map(_.length > 0)
+        .provideEnvironment(connection)
   }
 
-  def getAll(): RIO[ZioJAsyncConnection, Seq[IncrementResult]] = {
+  def getAll(): RIO[Any, Seq[IncrementResult]] = {
     // SELECT x.key, x.value, x.created_at AS createdAt, x.last_updated_at AS lastUpdatedAt
     //  FROM increment_result x
     val q = quote {
@@ -81,9 +85,10 @@ final class PostgresIncrementRepo() {
 
     Console.printLine("Fetching all key/values") *>
       run(q)
+        .provideEnvironment(connection)
   }
 
-  def get(key: String): RIO[ZioJAsyncConnection, Option[IncrementResult]] = {
+  def get(key: String): RIO[Any, Option[IncrementResult]] = {
     // SELECT incr.key, incr.value, incr.created_at AS createdAt, incr.last_updated_at AS lastUpdatedAt
     // FROM increment_result incr
     // WHERE incr.key = ?
@@ -93,7 +98,7 @@ final class PostgresIncrementRepo() {
     }
 
     Console.printLine(s"Fetching by key($key)") *>
-      run(q).map(_.headOption)
+      run(q).map(_.headOption).provideEnvironment(connection)
   }
 
 }

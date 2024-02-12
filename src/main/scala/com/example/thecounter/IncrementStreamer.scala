@@ -6,14 +6,13 @@ import io.getquill.context.qzio.ZioJAsyncConnection
 
 object IncrementStreamer {
   def make(
+      queue: Queue[Model.Increment],
       perBatchSize: Int,
       perBatchCollectionTime: Duration,
       updateBatchSize: Int
-  ): ZIO[InboundQueue, Nothing, ZStream[PostgresIncrementRepo with ZioJAsyncConnection, Throwable, Boolean]] = {
-    for {
-      queueStream <- InboundQueue.attachToStream
-      _ <- Console.printLine("Stream created.").ignore
-    } yield queueStream
+  ): ZStream[PostgresIncrementRepo, Throwable, Boolean] = {
+    ZStream
+      .fromQueue(queue)
       .via(batchIncrements(perBatchSize, perBatchCollectionTime))
       // buffer batches if necessary.
       .buffer(updateBatchSize * 4)
@@ -27,14 +26,13 @@ object IncrementStreamer {
 
   // For tests only.
   def makeInMemory(
+      queue: Queue[Model.Increment],
       perBatchSize: Int,
       perBatchCollectionTime: Duration,
       updateBatchSize: Int
-  ): ZIO[InboundQueue, Nothing, ZStream[TestIncrementRepo, Nothing, Boolean]] = {
-    for {
-      queueStream <- InboundQueue.attachToStream
-      _ <- Console.printLine("Stream created.").ignore
-    } yield queueStream
+  ): ZStream[TestIncrementRepo, Nothing, Boolean] = {
+    ZStream
+      .fromQueue(queue)
       .via(batchIncrements(perBatchSize, perBatchCollectionTime))
       .buffer(updateBatchSize * 4)
       .mapZIOParUnordered(updateBatchSize) { batch =>
@@ -50,8 +48,8 @@ object IncrementStreamer {
   ) = {
     ZPipeline
       .apply[Model.Increment]
-      // filter out no-ops where value == 0, but not necessary 0 + anything is anything.
-      .filter(_.value != 0)
+      // Keep everything above zero.
+      .filter(_.value > 0)
       // collect up to buffer size or until max collection duration.
       .groupedWithin(bufferSize, maxCollection)
       .tap(in =>
