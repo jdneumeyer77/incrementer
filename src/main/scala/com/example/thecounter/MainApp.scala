@@ -25,11 +25,11 @@ object MainApp extends ZIOAppDefault {
   // This applies backpressure on the client
   // but also may indicate the need for more nodes.
   val InboundQueueTimeout = 1.second
-  val InboundQueueBufferSize = 8096
+  val InboundQueueBufferSize = 8096 * 2
 
   // Collect up to StreamBatchSize or wait up to StreamCollectionTime
   // when collecting a batch.
-  val StreamBatchSize = 8096
+  val StreamBatchSize = 8096 * 8
   val StreamCollectionTime = 5.seconds
 
   // This is number of concurrent batch submissions/connections to Postgres

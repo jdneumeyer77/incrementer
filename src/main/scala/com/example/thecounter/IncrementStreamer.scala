@@ -21,7 +21,7 @@ object IncrementStreamer {
       // i.e. 1 + 2 + 3 = 6 no matter if (1 + 2) + 3 or (3 + 1) + 2.
       .mapZIOParUnordered(updateBatchSize) { batch =>
         // TODO: failure handling/retry logic.
-        IncrementRepo.submitBatchUpdate(batch.iterator)
+        IncrementRepo.submitBatchUpdate(batch.iterator).retryN(2)
       }
   }
 
@@ -63,5 +63,6 @@ object IncrementStreamer {
       )
       // group by key, add/consolidate values together. Addition is associative.
       .map(chunk => chunk.groupMapReduce(_.key)(_.value)(_ + _))
+      .tap(in => Console.printLine(s"consolidated batch size: ${in.size}").ignore)
   }
 }

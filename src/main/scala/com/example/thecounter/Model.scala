@@ -15,7 +15,7 @@ object Model {
 
   implicit val incrCodec: JsonValueCodec[Increment] = JsonCodecMaker.make
 
-  case class IncrementResult(key: String, value: Long, created_at: Instant, lastUpdatedAt: Instant)
+  case class IncrementResult(key: String, value: Long, createdAt: Instant, lastUpdatedAt: Instant)
 
   implicit val incrResultCodec: JsonValueCodec[IncrementResult] = JsonCodecMaker.make
   implicit val incrResultSeqCodec: JsonValueCodec[Seq[IncrementResult]] = JsonCodecMaker.make
