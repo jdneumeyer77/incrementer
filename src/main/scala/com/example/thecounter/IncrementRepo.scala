@@ -49,7 +49,7 @@ final class PostgresIncrementRepo(connection: ZEnvironment[ZioJAsyncConnection])
   implicit val instantDecoder: MappedEncoding[Date, Instant] =
     MappedEncoding[Date, Instant](d => d.toInstant)
 
-  def submitBatchUpdate(batch: Iterator[(String, Long)]): ZIO[Any, Throwable, Boolean] = {
+  def submitBatchUpdate(batch: Iterator[(String, Long)]): Task[Boolean] = {
     val list = batch.map { case (key, value) => IncrementResult(key, value, Instant.now(), Instant.now()) }.toList
 
     // batched queries:
@@ -76,7 +76,7 @@ final class PostgresIncrementRepo(connection: ZEnvironment[ZioJAsyncConnection])
         .provideEnvironment(connection)
   }
 
-  def getAll(): RIO[Any, Seq[IncrementResult]] = {
+  def getAll(): Task[Seq[IncrementResult]] = {
     // SELECT x.key, x.value, x.created_at AS createdAt, x.last_updated_at AS lastUpdatedAt
     //  FROM increment_result x
     val q = quote {
@@ -88,7 +88,7 @@ final class PostgresIncrementRepo(connection: ZEnvironment[ZioJAsyncConnection])
         .provideEnvironment(connection)
   }
 
-  def get(key: String): RIO[Any, Option[IncrementResult]] = {
+  def get(key: String): Task[Option[IncrementResult]] = {
     // SELECT incr.key, incr.value, incr.created_at AS createdAt, incr.last_updated_at AS lastUpdatedAt
     // FROM increment_result incr
     // WHERE incr.key = ?
@@ -99,6 +99,15 @@ final class PostgresIncrementRepo(connection: ZEnvironment[ZioJAsyncConnection])
 
     Console.printLine(s"Fetching by key($key)") *>
       run(q).map(_.headOption).provideEnvironment(connection)
+  }
+
+  def deleteAll(): Task[Unit] = {
+    val q = quote {
+      query[IncrementResult].delete
+    }
+
+    Console.printLine("deleting all keys") *>
+      run(q).map(_ => ()).provideEnvironment(connection)
   }
 
 }

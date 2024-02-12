@@ -18,6 +18,7 @@ object Model {
   case class IncrementResult(key: String, value: Long, createdAt: Instant, lastUpdatedAt: Instant)
 
   implicit val incrResultCodec: JsonValueCodec[IncrementResult] = JsonCodecMaker.make
+  // Not sure why these don't autogen.
   implicit val incrResultSeqCodec: JsonValueCodec[Seq[IncrementResult]] = JsonCodecMaker.make
   implicit val incrResultOptCodec: JsonValueCodec[Option[IncrementResult]] = JsonCodecMaker.make
 }

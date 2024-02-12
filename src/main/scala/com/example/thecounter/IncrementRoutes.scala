@@ -37,6 +37,7 @@ object IncrementRoutes {
           Response.status(Status.Accepted)
         }
       },
+      // These are mostly for testing.
       Method.GET / "increment" -> handler { (req: Request) =>
         incrementService.all.map { incrs =>
           Response.json(writeToString(incrs))
@@ -46,6 +47,10 @@ object IncrementRoutes {
         incrementService.lookup(key).map { incr =>
           Response.json(writeToString(incr))
         }
+      },
+      // Obviously should be not be exposed in production.
+      Method.DELETE / "increment" -> handler { (req: Request) =>
+        incrementService.deleteAll().map(_ => Response.ok)
       }
     )
   }.sandbox

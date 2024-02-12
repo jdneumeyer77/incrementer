@@ -1,0 +1,30 @@
+wrk -t10 -c20 -d2m -s ./benchmark/random_names.lua http://localhost:3333
+Running 2m test @ http://localhost:3333
+  10 threads and 20 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   611.98us    1.44ms  34.61ms   95.39%
+    Req/Sec     5.53k     1.03k   10.05k    70.15%
+  6598338 requests in 2.00m, 276.88MB read
+Requests/sec:  54972.22
+Transfer/sec:      2.31MB
+----------------------------
+wrk -t32 -c64 -d2m -s ./benchmark/random_names.lua http://localhost:3333
+Running 2m test @ http://localhost:3333
+  32 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.20ms    1.77ms  41.10ms   93.54%
+    Req/Sec     2.28k   413.37     4.55k    68.95%
+  8732400 requests in 2.00m, 366.43MB read
+Requests/sec:  72711.27
+Transfer/sec:      3.05MB
+----------------------------
+wrk -t16 -c128 -d2m -s ./benchmark/random_names.lua http://localhost:3333
+Running 2m test @ http://localhost:3333
+  16 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     2.19ms    2.98ms  85.24ms   93.60%
+    Req/Sec     4.67k     0.86k    8.73k    73.92%
+  8923933 requests in 2.00m, 374.46MB read
+Requests/sec:  74305.16
+Transfer/sec:      3.12MB
+----------------------------

@@ -1,0 +1,20 @@
+wrk -t10 -c20 -d8s -s ./benchmark/verify.lua http://localhost:3333
+Running 8s test @ http://localhost:3333
+  10 threads and 20 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   312.50us  598.45us  10.25ms   95.97%
+    Req/Sec     8.97k   568.17    10.94k    74.01%
+  721613 requests in 8.10s, 30.28MB read
+Requests/sec:  89092.97
+Transfer/sec:      3.74MB
+thread Maverick total 400193
+thread Goose total 398363
+thread Viper total 397704
+thread Iceman total 397554
+thread Merlin total 398188
+thread Sundown total 389345
+thread Cougar total 397767
+thread Hollywood total 399792
+thread Wolfman total 396775
+thread Jester total 392501
+-------------------

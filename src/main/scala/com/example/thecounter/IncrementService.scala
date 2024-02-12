@@ -13,6 +13,7 @@ trait IncrementService {
   def enqueue(incr: Model.Increment): ZIO[Any, Response, Boolean]
   def all(): ZIO[Any, Response, Seq[Model.IncrementResult]]
   def lookup(key: String): ZIO[Any, Response, Option[Model.IncrementResult]]
+  def deleteAll(): ZIO[Any, Response, Unit]
 }
 
 final class IncrementServiceProd(inbound: Queue[Model.Increment], repo: PostgresIncrementRepo, timeout: Duration)
@@ -27,5 +28,8 @@ final class IncrementServiceProd(inbound: Queue[Model.Increment], repo: Postgres
   override def lookup(key: String): ZIO[Any, Response, Option[Model.IncrementResult]] = {
     repo.get(key).mapError(throwable => Response.internalServerError(throwable.getMessage))
   }
+
+  override def deleteAll(): ZIO[Any, Response, Unit] =
+    repo.deleteAll().mapError(throwable => Response.internalServerError(throwable.getMessage))
 
 }
