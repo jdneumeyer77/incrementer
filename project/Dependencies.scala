@@ -14,6 +14,8 @@ object Dependencies {
   val zioQuill = "io.getquill" %% "quill-zio" % "4.8.1"
   val zioQuillPostgresAsync = "io.getquill" %% "quill-jasync-zio-postgres" % "4.8.0"
 
+  val logging = "org.slf4j" % "slf4j-simple" % "2.0.12"
+
   val zioTest = "dev.zio" %% "zio-test" % zioVersion % Test
   val zioTestSBT = "dev.zio" %% "zio-test-sbt" % zioVersion % Test
   val zioTestMagnolia = "dev.zio" %% "zio-test-magnolia" % zioVersion % Test

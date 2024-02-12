@@ -20,7 +20,8 @@ def settingsApp = Seq(
     zioQuill,
     zioQuillPostgresAsync,
     jsoniter,
-    jsoniterMacros
+    jsoniterMacros,
+    logging
   )
 )
 

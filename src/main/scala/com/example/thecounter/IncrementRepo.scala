@@ -7,14 +7,9 @@ import java.time.Instant
 import java.util.Date
 import io.getquill.context.qzio.ZioJAsyncConnection
 
+import Model.IncrementResult
+
 object IncrementRepo {
-  import com.github.plokhotnyuk.jsoniter_scala.macros._
-  import com.github.plokhotnyuk.jsoniter_scala.core._
-
-  case class IncrementResult(key: String, value: Long, createdAt: Instant, lastUpdatedAt: Instant)
-
-  implicit val codec: JsonValueCodec[IncrementResult] = JsonCodecMaker.make
-
   def submitBatchUpdate(batch: Iterator[(String, Long)]) =
     ZIO.serviceWith[PostgresIncrementRepo](_.submitBatchUpdate(batch)).flatten
 
@@ -24,8 +19,7 @@ object IncrementRepo {
 }
 
 // TODO: Move to tests
-final case class TestIncrementRepo(val map: TrieMap[String, IncrementRepo.IncrementResult]) {
-  import IncrementRepo.IncrementResult
+final case class TestIncrementRepo(val map: TrieMap[String, IncrementResult]) {
 
   def submitBatchUpdate(batch: Iterator[(String, Long)]): UIO[Boolean] = ZIO.succeed {
     batch.foreach { case (key, incoming_value) =>
@@ -45,7 +39,7 @@ final case class TestIncrementRepo(val map: TrieMap[String, IncrementRepo.Increm
 
 final class PostgresIncrementRepo() {
   import DBContext._
-  import IncrementRepo._
+  import DBContext.extras._
 
   implicit val instantEncoder: MappedEncoding[Instant, Date] =
     MappedEncoding[Instant, Date](i => Date.from(i))
@@ -57,31 +51,36 @@ final class PostgresIncrementRepo() {
 
     // batched queries:
     // INSERT INTO increment_result AS t (key,value,created_at,last_updated_at) VALUES (?, ?, ?, ?)
-    // ON CONFLICT (value,last_updated_at)
-    // DO UPDATE SET value = (old.value + EXCLUDED.value)
+    // ON CONFLICT (key)
+    // DO UPDATE SET
+    // value = (old.value + EXCLUDED.value)
+    // last_updated_at = now
     val q = quote {
       liftQuery(list).foreach { insert =>
         query[IncrementResult]
           .insertValue(insert)
-          .onConflictUpdate(_.value, _.lastUpdatedAt)((old, next) => old.value -> (old.value + next.value)
-          // (old, next) => old.lastUpdatedAt -> (Instant.now())
+          .onConflictUpdate(_.key)(
+            (t, next) => t.value -> (t.value + next.value),
+            (t, next) => t.lastUpdatedAt -> lift(Instant.now())
           )
 
       }
     }
 
-    run(q)
-      .map(_.length > 0)
+    Console.printLine(s"updating by batch") *>
+      run(q)
+        .map(_.length > 0)
   }
 
-  def getAll(): RIO[ZioJAsyncConnection, Seq[IncrementRepo.IncrementResult]] = {
+  def getAll(): RIO[ZioJAsyncConnection, Seq[IncrementResult]] = {
     // SELECT x.key, x.value, x.created_at AS createdAt, x.last_updated_at AS lastUpdatedAt
     //  FROM increment_result x
     val q = quote {
       query[IncrementResult]
     }
 
-    run(q)
+    Console.printLine("Fetching all key/values") *>
+      run(q)
   }
 
   def get(key: String): RIO[ZioJAsyncConnection, Option[IncrementResult]] = {
@@ -93,7 +92,8 @@ final class PostgresIncrementRepo() {
       query[IncrementResult].filter(incr => incr.key == lift(key)).take(1)
     }
 
-    run(q).map(_.headOption)
+    Console.printLine(s"Fetching by key($key)") *>
+      run(q).map(_.headOption)
   }
 
 }

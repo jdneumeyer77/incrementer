@@ -64,33 +64,4 @@ object IncrementStreamer {
       // group by key, add/consolidate values together. Addition is associative.
       .map(chunk => chunk.groupMapReduce(_.key)(_.value)(_ + _))
   }
-
-  // def coordinateBatchesPostgres(bufferSize: Int = 16, maxCollectionDuration: Duration = 6.seconds) =
-  //   coordinateBatches(bufferSize, maxCollectionDuration)
-  //     .mapZIOParUnordered(bufferSize) { batch =>
-  //       // TODO: failure handling/retry logic.
-  //       IncrementRepo.submitBatchUpdate(batch.iterator)
-  //     }
-
-  // def coordinateBatchesInMemory(bufferSize: Int = 16, maxCollectionDuration: Duration = 6.seconds) =
-  //   coordinateBatches(bufferSize, maxCollectionDuration)
-  //     .mapZIOParUnordered(bufferSize) { batch =>
-  //       ZIO.serviceWith[TestIncrementRepo](_.submitBatchUpdate(batch.iterator)).flatten
-  //     }
-
-  // // Since addition is associative in nature batches can be inserted in any order and parallel.
-  // def coordinateBatches(
-  //     bufferSize: Int = 16,
-  //     maxCollectionDuration: Duration = 6.seconds
-  // ): ZPipeline[Any, Nothing, Map[String, Long], Map[String, Long]] = {
-  //   ZPipeline
-  //     .apply[Map[String, Long]]
-  //     .groupedWithin(bufferSize, maxCollectionDuration)
-  //     .tap(in =>
-  //       Console
-  //         .printLine(s"collected a batch of ${in.length} within ${maxCollectionDuration.getSeconds()} seconds")
-  //         .ignoreLogged
-  //     )
-  //     .flattenChunks
-  // }
 }

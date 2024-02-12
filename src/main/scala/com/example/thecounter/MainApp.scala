@@ -5,6 +5,9 @@ import zio.http._
 import zio.http.endpoint._
 import zio.http.Response
 
+import com.github.plokhotnyuk.jsoniter_scala.core._
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
 import Utils._
 import zio.stream.ZStream
 import scala.collection.concurrent.TrieMap
@@ -16,7 +19,7 @@ import io.getquill.util.LoadConfig
 object DBContext extends PostgresZioJAsyncContext(SnakeCase)
 
 object MainApp extends ZIOAppDefault {
-  // TODO: Move to config file...
+  // TODO: Move to application.conf
   // Queue blocks upon reaching the size limit
   // and times out after so many seconds.
   // This applies backpressure on the client
@@ -33,12 +36,12 @@ object MainApp extends ZIOAppDefault {
   // TODO: This should align with the size of postgres connection pool.
   val StreamParrelBatch = 16
 
-  val dbConfig = ZLayer.succeed(PostgresJAsyncContextConfig(LoadConfig.apply("testPostgresDB")))
+  val dbConfig = ZLayer.succeed(PostgresJAsyncContextConfig(LoadConfig.apply("counterdb")))
 
   val connection =
     ZioJAsyncConnection.live[PostgreSQLConnection]
 
-  val postgresIncrementRepo = connection ++ ZLayer.succeed(new PostgresIncrementRepo())
+  val postgresIncrementRepo = (connection ++ ZLayer.succeed(new PostgresIncrementRepo())).memoize
 
   val routes = Routes(
     Method.POST / "increment" -> handler { (req: Request) =>
@@ -56,12 +59,12 @@ object MainApp extends ZIOAppDefault {
     },
     Method.GET / "increment" -> handler { (req: Request) =>
       IncrementRepo.getAll().map { incrs =>
-        Response.json(incrs.toString)
+        Response.json(writeToString(incrs))
       }
     },
     Method.GET / "increment" / string("key") -> handler { (key: String, req: Request) =>
-      IncrementRepo.get(key).map { incrs =>
-        Response.json(incrs.toString)
+      IncrementRepo.get(key).map { incr =>
+        Response.json(writeToString(incr))
       }
     }
   ).sandbox
@@ -70,16 +73,17 @@ object MainApp extends ZIOAppDefault {
     for {
       q <- InboundQueue.make(InboundQueueBufferSize, InboundQueueTimeout)
       queue = ZLayer.succeed(q)
+      repo <- postgresIncrementRepo
       // Stream runs in the background
       streamFiber <- IncrementStreamer
         .make(StreamBatchSize, StreamCollectionTime, StreamParrelBatch)
         .flatMap(x => x.runDrain)
-        .provide(queue, postgresIncrementRepo, dbConfig)
+        .provide(queue, repo, dbConfig)
         .fork
       // concurrently with the webservice.
       service <- Server
         .serve(routes.toHttpApp)
-        .provide(Server.defaultWithPort(3333), queue, postgresIncrementRepo, dbConfig)
+        .provide(Server.defaultWithPort(3333), queue, repo, dbConfig)
         .fork
       _ <- Console.printLine("Application started at http://localhost:3333")
       _ <- streamFiber.zip(service).join
