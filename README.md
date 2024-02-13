@@ -1,5 +1,5 @@
 
-# Pre
+# Prerequisites
 You'll need to install sbt (via brew or favorite package manager) and a JVM (JDK11 or 17 should work fine). Benchmarks need wrk installed.
 
 # Running tests
