@@ -21,10 +21,10 @@ object IncrementStreamSpec extends ZIOSpecDefault {
         .fromIterator(increments.iterator)
         .via(batchIncrements(10, 33.milli))
         .map { batch =>
-          assertTrue(batch.size == 2) &&
-          assertTrue(!batch.contains("3")) &&
-          assertTrue(batch("1") == 9) &&
-          assertTrue(batch("2") == 3)
+          assertTrue(batch.values.size == 2) &&
+          assertTrue(!batch.values.contains("3")) &&
+          assertTrue(batch.values("1") == 9) &&
+          assertTrue(batch.values("2") == 3)
         }
         .run(ZSink.foldLeft(assertTrue(true)) { case (acc, next) => acc && next })
 

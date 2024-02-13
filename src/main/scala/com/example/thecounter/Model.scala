@@ -9,8 +9,11 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import java.time.Instant
+import java.util.UUID
 
 object Model {
+  case class Batch(values: Map[String, Long], createdAt: Instant = Instant.now, id: UUID = UUID.randomUUID())
+
   case class Increment(key: String, value: Long)
 
   implicit val incrCodec: JsonValueCodec[Increment] = JsonCodecMaker.make

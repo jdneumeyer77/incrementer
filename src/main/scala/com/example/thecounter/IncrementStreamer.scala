@@ -20,24 +20,7 @@ object IncrementStreamer {
       // i.e. 1 + 2 + 3 = 6 no matter if (1 + 2) + 3 or (3 + 1) + 2.
       .mapZIOParUnordered(updateBatchSize) { batch =>
         // TODO: failure handling/retry logic.
-        IncrementRepo.submitBatchUpdate(batch.iterator).retryN(2)
-      }
-  }
-
-  // For tests only.
-  def makeInMemory(
-      queue: Queue[Model.Increment],
-      perBatchSize: Int,
-      perBatchCollectionTime: Duration,
-      updateBatchSize: Int
-  ): ZStream[TestIncrementRepo, Nothing, Boolean] = {
-    ZStream
-      .fromQueue(queue)
-      .via(batchIncrements(perBatchSize, perBatchCollectionTime))
-      .buffer(updateBatchSize * 4)
-      .mapZIOParUnordered(updateBatchSize) { batch =>
-        // TODO: failure handling/retry logic.
-        ZIO.serviceWith[TestIncrementRepo](_.submitBatchUpdate(batch.iterator)).flatten
+        IncrementRepo.submitBatchUpdate(batch).retryN(2)
       }
   }
 
@@ -60,7 +43,7 @@ object IncrementStreamer {
           .ignoreLogged
       )
       // group by key, add/consolidate values together. Addition is associative.
-      .map(chunk => chunk.groupMapReduce(_.key)(_.value)(_ + _))
-      .tap(in => Console.printLine(s"consolidated batch size: ${in.size}").ignore)
+      .map(chunk => Model.Batch(chunk.groupMapReduce(_.key)(_.value)(_ + _)))
+      .tap(in => Console.printLine(s"consolidated batch size: ${in.values.size}").ignore)
   }
 }

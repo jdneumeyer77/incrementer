@@ -12,6 +12,8 @@ object IncrementRouteSpec extends ZIOSpecDefault {
 
   object NoopIncrementService extends IncrementService {
 
+    override def deleteAll(): ZIO[Any, Response, Unit] = ZIO.unit
+
     override def enqueue(incr: Model.Increment): ZIO[Any, Response, Boolean] = ZIO.succeed(true)
 
     override def all(): ZIO[Any, Response, Seq[Model.IncrementResult]] = ZIO.succeed(List.empty)

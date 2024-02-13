@@ -10,7 +10,7 @@ import io.getquill.context.qzio.ZioJAsyncConnection
 import Model.IncrementResult
 
 object IncrementRepo {
-  def submitBatchUpdate(batch: Iterator[(String, Long)]) =
+  def submitBatchUpdate(batch: Model.Batch) =
     ZIO.serviceWith[PostgresIncrementRepo](_.submitBatchUpdate(batch)).flatten
 
   def getAll() = ZIO.serviceWith[PostgresIncrementRepo](_.getAll()).flatten
@@ -25,8 +25,8 @@ object IncrementRepo {
 // TODO: Move to tests
 final case class TestIncrementRepo(val map: TrieMap[String, IncrementResult]) {
 
-  def submitBatchUpdate(batch: Iterator[(String, Long)]): UIO[Boolean] = ZIO.succeed {
-    batch.foreach { case (key, incoming_value) =>
+  def submitBatchUpdate(batch: Model.Batch): UIO[Boolean] = ZIO.succeed {
+    batch.values.foreach { case (key, incoming_value) =>
       map.get(key) match {
         case None    => map.put(key, IncrementResult(key, incoming_value, Instant.now(), Instant.now()))
         case Some(v) => map.put(key, v.copy(value = v.value + incoming_value, lastUpdatedAt = Instant.now()))
@@ -49,29 +49,46 @@ final class PostgresIncrementRepo(connection: ZEnvironment[ZioJAsyncConnection])
   implicit val instantDecoder: MappedEncoding[Date, Instant] =
     MappedEncoding[Date, Instant](d => d.toInstant)
 
-  def submitBatchUpdate(batch: Iterator[(String, Long)]): Task[Boolean] = {
-    val list = batch.map { case (key, value) => IncrementResult(key, value, Instant.now(), Instant.now()) }.toList
+  def submitBatchUpdate(batch: Model.Batch): Task[Boolean] = {
+    val list = batch.values.map { case (key, value) =>
+      IncrementResult(key, value, batch.createdAt, batch.createdAt)
+    }.toList
 
+    val now = Instant.now()
     // batched queries:
     // INSERT INTO increment_result AS t (key,value,created_at,last_updated_at) VALUES (?, ?, ?, ?)
     // ON CONFLICT (key)
     // DO UPDATE SET
     // value = (old.value + EXCLUDED.value)
-    // last_updated_at = now
+    // last_updated_at = ?
     val q = quote {
       liftQuery(list).foreach { insert =>
         query[IncrementResult]
           .insertValue(insert)
           .onConflictUpdate(_.key)(
             (t, next) => t.value -> (t.value + next.value),
-            (t, next) => t.lastUpdatedAt -> lift(Instant.now())
+            (t, next) => t.lastUpdatedAt -> lift(now)
           )
 
       }
     }
 
-    Console.printLine(s"updating by batch") *>
-      run(q)
+    // 4096 is the batch insertion size. 32k is the limit;
+    // however, query substitutions i.e., ? in the above there's 5
+    // 32/5 = ~6.5. Stay under that limit. If the collection (batch)
+    // is bigger it automatics splits it across multiple batches of 4096
+    // https://zio.dev/zio-quill/writing-queries/#batch-optimization
+    Console.printLine(s"updating by batch: ${batch.id}") *>
+      run(q, 4096)
+        .flatMap { in =>
+          val diffnow = Instant.now()
+          val timediff = diffnow.toEpochMilli - batch.createdAt.toEpochMilli
+          val executiondiff = diffnow.toEpochMilli - now.toEpochMilli
+          Console
+            .printLine(s"Batch ${batch.id} took ${timediff}ms since added. Execution: ${executiondiff}ms")
+            .ignore *>
+            ZIO.succeed(in)
+        }
         .map(_.length > 0)
         .provideEnvironment(connection)
   }
