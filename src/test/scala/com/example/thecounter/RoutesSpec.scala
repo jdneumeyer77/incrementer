@@ -49,6 +49,9 @@ object IncrementRouteSpec extends ZIOSpecDefault {
     test("value must be positive") {
       run(Increment("bob", 0)) { resp =>
         assertTrue(resp.status.code == 400)
+      } &&
+      run(Increment("bob", -38)) { resp =>
+        assertTrue(resp.status.code == 400)
       }
     },
     test("invalid json") {

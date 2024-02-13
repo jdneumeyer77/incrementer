@@ -9,18 +9,21 @@ object IncrementStreamer {
       queue: Queue[Model.Increment],
       perBatchSize: Int,
       perBatchCollectionTime: Duration,
-      updateBatchSize: Int
+      parallelBatches: Int
   ): ZStream[PostgresIncrementRepo, Throwable, Boolean] = {
     ZStream
       .fromQueue(queue)
       .via(batchIncrements(perBatchSize, perBatchCollectionTime))
       // buffer batches if necessary.
-      .buffer(updateBatchSize * 4)
+      .buffer(parallelBatches * 4)
       // order doesn't matter since addition is associative,
       // i.e. 1 + 2 + 3 = 6 no matter if (1 + 2) + 3 or (3 + 1) + 2.
-      .mapZIOParUnordered(updateBatchSize) { batch =>
+      .mapZIOParUnordered(parallelBatches) { batch =>
         // TODO: failure handling/retry logic.
-        IncrementRepo.submitBatchUpdate(batch).retryN(2)
+        IncrementRepo
+          .submitBatchUpdate(batch)
+          .logError("db error (retrying twice).")
+          .retryN(2)
       }
   }
 
@@ -43,6 +46,7 @@ object IncrementStreamer {
           .ignoreLogged
       )
       // group by key, add/consolidate values together. Addition is associative.
+      // IDEA: Make sure batches are up to a size and split.
       .map(chunk => Model.Batch(chunk.groupMapReduce(_.key)(_.value)(_ + _)))
       .tap(in => Console.printLine(s"consolidated batch size: ${in.values.size}").ignore)
   }

@@ -1,0 +1,59 @@
+wrk -t3 -c6 -d1m --latency -s ./benchmark/basic.lua http://localhost:3333
+Running 1m test @ http://localhost:3333
+  3 threads and 6 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   156.05us  386.85us   7.68ms   98.55%
+    Req/Sec    15.95k     1.45k   17.83k    76.04%
+  Latency Distribution
+     50%  113.00us
+     75%  124.00us
+     90%  136.00us
+     99%    1.66ms
+  2861119 requests in 1.00m, 120.06MB read
+Requests/sec:  47606.04
+Transfer/sec:      2.00MB
+-------------------------
+wrk -t16 -c48 -d1m --latency -s ./benchmark/basic.lua http://localhost:3333
+Running 1m test @ http://localhost:3333
+  16 threads and 48 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   681.90us    0.95ms  30.47ms   92.27%
+    Req/Sec     5.84k   730.18     8.43k    69.69%
+  Latency Distribution
+     50%  420.00us
+     75%  604.00us
+     90%    1.31ms
+     99%    4.67ms
+  5580124 requests in 1.00m, 234.15MB read
+Requests/sec:  92940.28
+Transfer/sec:      3.90MB
+-------------------------
+wrk -t24 -c96 -d1m --latency -s ./benchmark/basic.lua http://localhost:3333
+Running 1m test @ http://localhost:3333
+  24 threads and 96 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.23ms    1.79ms  53.84ms   93.49%
+    Req/Sec     4.17k   501.50     8.59k    67.28%
+  Latency Distribution
+     50%  801.00us
+     75%    1.19ms
+     90%    2.30ms
+     99%    7.44ms
+  5977993 requests in 1.00m, 250.85MB read
+Requests/sec:  99543.08
+Transfer/sec:      4.18MB
+-------------------------
+wrk -t32 -c96 -d1m --latency -s ./benchmark/basic.lua http://localhost:3333
+Running 1m test @ http://localhost:3333
+  32 threads and 96 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.21ms    1.64ms  55.92ms   93.13%
+    Req/Sec     3.10k   369.93     5.39k    67.83%
+  Latency Distribution
+     50%  815.00us
+     75%    1.21ms
+     90%    2.25ms
+     99%    7.18ms
+  5931740 requests in 1.00m, 248.91MB read
+Requests/sec:  98783.64
+Transfer/sec:      4.15MB

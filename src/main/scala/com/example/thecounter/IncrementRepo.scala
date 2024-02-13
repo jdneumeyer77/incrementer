@@ -22,25 +22,6 @@ object IncrementRepo {
   } yield new PostgresIncrementRepo(connection)
 }
 
-// TODO: Move to tests
-final case class TestIncrementRepo(val map: TrieMap[String, IncrementResult]) {
-
-  def submitBatchUpdate(batch: Model.Batch): UIO[Boolean] = ZIO.succeed {
-    batch.values.foreach { case (key, incoming_value) =>
-      map.get(key) match {
-        case None    => map.put(key, IncrementResult(key, incoming_value, Instant.now(), Instant.now()))
-        case Some(v) => map.put(key, v.copy(value = v.value + incoming_value, lastUpdatedAt = Instant.now()))
-      }
-    }
-    true
-  }
-
-  def getAll(): Task[List[IncrementResult]] = ZIO.succeed(map.values.toList)
-
-  def get(key: String): Task[Option[IncrementResult]] = ZIO.succeed(map.get(key))
-
-}
-
 final class PostgresIncrementRepo(connection: ZEnvironment[ZioJAsyncConnection]) {
   import DBContext._
 
@@ -52,7 +33,7 @@ final class PostgresIncrementRepo(connection: ZEnvironment[ZioJAsyncConnection])
   def submitBatchUpdate(batch: Model.Batch): Task[Boolean] = {
     val list = batch.values.map { case (key, value) =>
       IncrementResult(key, value, batch.createdAt, batch.createdAt)
-    }.toList
+    }
 
     val now = Instant.now()
     // batched queries:

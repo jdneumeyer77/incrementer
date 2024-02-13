@@ -18,3 +18,94 @@ thread Hollywood total 399792
 thread Wolfman total 396775
 thread Jester total 392501
 -------------------
+wrk -t10 -c100 -d5m --latency -s ./benchmark/verify.lua http://localhost:3333
+Running 5m test @ http://localhost:3333
+  10 threads and 100 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.26ms    1.82ms  75.65ms   93.76%
+    Req/Sec     9.86k     0.95k   13.78k    79.03%
+  Latency Distribution
+     50%  838.00us
+     75%    1.23ms
+     90%    2.30ms
+     99%    7.87ms
+  29428452 requests in 5.00m, 1.21GB read
+Requests/sec:  98072.14
+Transfer/sec:      4.12MB
+thread Maverick total 16068659
+thread Goose total 16238742
+thread Viper total 16245768
+thread Iceman total 16083390
+thread Merlin total 16240647
+thread Sundown total 16250977
+thread Cougar total 16078453
+thread Hollywood total 16273796
+thread Wolfman total 16129801
+thread Jester total 16258561
+
+GET /increment results:
+[
+    {
+        "key": "Maverick",
+        "value": 16068653,
+        "createdAt": "2024-02-13T17:29:04.792Z",
+        "lastUpdatedAt": "2024-02-13T17:34:04.830Z"
+    },
+    {
+        "key": "Sundown",
+        "value": 16250977,
+        "createdAt": "2024-02-13T17:29:04.953Z",
+        "lastUpdatedAt": "2024-02-13T17:34:04.830Z"
+    },
+    {
+        "key": "Wolfman",
+        "value": 16129801,
+        "createdAt": "2024-02-13T17:29:04.953Z",
+        "lastUpdatedAt": "2024-02-13T17:34:09.828Z"
+    },
+    {
+        "key": "Cougar",
+        "value": 16078453,
+        "createdAt": "2024-02-13T17:29:04.953Z",
+        "lastUpdatedAt": "2024-02-13T17:34:09.828Z"
+    },
+    {
+        "key": "Merlin",
+        "value": 16240647,
+        "createdAt": "2024-02-13T17:29:04.953Z",
+        "lastUpdatedAt": "2024-02-13T17:34:09.828Z"
+    },
+    {
+        "key": "Jester",
+        "value": 16258561,
+        "createdAt": "2024-02-13T17:29:04.953Z",
+        "lastUpdatedAt": "2024-02-13T17:34:09.828Z"
+    },
+    {
+        "key": "Hollywood",
+        "value": 16273796,
+        "createdAt": "2024-02-13T17:29:04.953Z",
+        "lastUpdatedAt": "2024-02-13T17:34:09.828Z"
+    },
+    {
+        "key": "Viper",
+        "value": 16245768,
+        "createdAt": "2024-02-13T17:29:04.953Z",
+        "lastUpdatedAt": "2024-02-13T17:34:09.828Z"
+    },
+    {
+        "key": "Goose",
+        "value": 16238742,
+        "createdAt": "2024-02-13T17:29:04.953Z",
+        "lastUpdatedAt": "2024-02-13T17:34:09.828Z"
+    },
+    {
+        "key": "Iceman",
+        "value": 16083390,
+        "createdAt": "2024-02-13T17:29:04.953Z",
+        "lastUpdatedAt": "2024-02-13T17:34:09.828Z"
+    }
+]
+
+All line up.
+-----

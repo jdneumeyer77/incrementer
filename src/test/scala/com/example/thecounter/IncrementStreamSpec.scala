@@ -30,7 +30,7 @@ object IncrementStreamSpec extends ZIOSpecDefault {
 
       runtime.run(stream)
     },
-    test("test spillover") {
+    test("test spillover batches") {
 
       val increments = List("1" -> 1, "2" -> 3, "1" -> 3, "3" -> 0, "1" -> 5).map { case (k, v) => Increment(k, v) }
 
